@@ -33,10 +33,16 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   @override
+  int cont = 0;
+  bool state = false;
+  bool _enabled;
+  bool _isMoving;
+  double lat = 0;
+  double lon = 0;
   void initState() {
     // TODO: implement initState
     super.initState();
-
+    cont = 0;
     ////
     // 1.  Listen to events (See docs for all 12 available events).
     //
@@ -44,8 +50,13 @@ class _MyHomePageState extends State<MyHomePage> {
     // Fired whenever a location is recorded
     bg.BackgroundGeolocation.onLocation((bg.Location location) {
       //print('[location] - $location');
-      sendCoords(location.coords.latitude, location.coords.longitude);
-      print("COORDENADAS");
+      sendCoordinates(location.coords.latitude, location.coords.longitude);
+      setState(() {
+        lat = location.coords.latitude;
+        lon = location.coords.longitude;
+        cont = cont + 1;
+      });
+      print("COORDENADAS de mi celular");
       print("${location.coords.latitude} ${location.coords.longitude}");
     });
 
@@ -64,10 +75,10 @@ class _MyHomePageState extends State<MyHomePage> {
     //
     bg.BackgroundGeolocation.ready(bg.Config(
             desiredAccuracy: bg.Config.DESIRED_ACCURACY_NAVIGATION,
-            distanceFilter: 1.0,
+            distanceFilter: 5.0,
             stopOnTerminate: false,
             startOnBoot: true,
-            debug: true,
+            debug: false,
             logLevel: bg.Config.LOG_LEVEL_VERBOSE,
             allowIdenticalLocations: false,
             stopTimeout: 10,
@@ -75,18 +86,22 @@ class _MyHomePageState extends State<MyHomePage> {
             disableStopDetection: true))
         .then((bg.State state) {
       if (!state.enabled) {
-        ////
-        // 3.  Start the plugin.
-        //
+        print("[ready] ${state.toMap()}");
+        setState(() {
+          _enabled = state.enabled;
+          _isMoving = state.isMoving;
+        });
         bg.BackgroundGeolocation.start();
       }
+    }).catchError((error) {
+      print('[ready] ERROR: $error');
     });
   }
 
-  sendCoords(lat, lng) async {
+  sendCoordinates(lat, lng) async {
     Response response;
     Dio dio = new Dio();
-    response = await dio.get("http://192.168.15.6:8000/api/coords",
+    response = await dio.get("http://cceo.io:8019/api/coords",
         queryParameters: {"lat": lat, "lng": lng});
 
     print("RESPONSE");
@@ -97,19 +112,99 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title),
+        title: Text("Ubicación"),
+        centerTitle: true,
+        actions: <Widget>[
+          /*    Switch(
+              value: state,
+              onChanged: _onClickEnable
+          ),*/
+        ],
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[],
+      body: SingleChildScrollView(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              SizedBox(
+                height: 10,
+              ),
+              InkWell(
+                onTap: state
+                    ? () {
+                        setState(() {
+                          state = false;
+                        });
+                        _onClickEnable(state);
+                      }
+                    : () {
+                        setState(() {
+                          state = true;
+                        });
+                        _onClickEnable(state);
+                      },
+                child: Container(
+                  decoration: BoxDecoration(
+                      color: state ? Colors.red : Colors.green,
+                      borderRadius: BorderRadius.circular(5)),
+                  height: 40,
+                  width: MediaQuery.of(context).size.width * .9,
+                  child: Center(
+                      child: Text(
+                    state ? 'Apagar' : 'Encender',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20),
+                  )),
+                ),
+              ),
+              SizedBox(
+                height: 20,
+              ),
+              Container(
+                decoration:
+                    BoxDecoration(borderRadius: BorderRadius.circular(5)),
+                width: MediaQuery.of(context).size.width * .9,
+                child: Center(
+                    child: Text(
+                  "Coordenadas\nLatitud: $lat\nLongitud: $lon\nTotal de cambios: $cont",
+                  style: TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20),
+                  textAlign: TextAlign.center,
+                )),
+              )
+            ],
+          ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: null,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
-      ),
     );
+  }
+
+  void _onClickEnable(enabled) {
+    if (enabled) {
+      // Reset odometer.
+      bg.BackgroundGeolocation.start().then((bg.State state) {
+        print('iniciando [start] success $state');
+        setState(() {
+          _enabled = state.enabled;
+          _isMoving = state.isMoving;
+        });
+      }).catchError((error) {
+        print('[start] ERROR: $error');
+      });
+    } else {
+      bg.BackgroundGeolocation.stop().then((bg.State state) {
+        print('detenido [stop] success: $state');
+
+        setState(() {
+          _enabled = state.enabled;
+          _isMoving = state.isMoving;
+        });
+      });
+    }
   }
 }
